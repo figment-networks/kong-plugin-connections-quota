@@ -1,5 +1,4 @@
 local kong = kong
-local inspect = require('inspect')
 local reports = require "kong.reports"
 local redis = require "resty.redis"
 local timestamp = require "kong.tools.timestamp"

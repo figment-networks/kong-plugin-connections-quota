@@ -1,7 +1,6 @@
 local local_strategy = require "kong.plugins.connections-quota.policies.strategy.local"
 local redis_strategy = require "kong.plugins.connections-quota.policies.strategy.redis"
 
-local kong = kong
 local null = ngx.null
 local fmt = string.format
 

@@ -1,6 +1,6 @@
 local policies = require "kong.plugins.connections-quota.policies"
 local timestamp = require "kong.tools.timestamp"
-local inspect = require('inspect')
+
 local kong = kong
 local kong_request = kong.request
 local max = math.max
