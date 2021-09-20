@@ -242,6 +242,14 @@ describe("Websockets [#" .. strategy .. "]", function()
 
       wc1:close()
       wc2:close()
+
+      wc1      = open_socket(uri, auth_key)
+      assert(wc1:send_ping(cjson.encode(payload)))
+      local frame, typ, err = wc1:recv_frame()
+      assert.is_nil(wc1.fatal)
+      assert(frame, err)
+      assert.equal("pong", typ)
+      wc1:close()
     end)
 
     it("send 429 error code under HTTPS", function()
