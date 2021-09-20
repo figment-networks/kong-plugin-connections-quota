@@ -60,13 +60,16 @@ local strategy = function (get_local_key, CONCURRENT_CONNECTIONS_QUOTA, TOTAL_CO
   end
 
   return {
-    increment = function(conf, identifier, value, limits, current_timestamp)
+    increment_concurrent_count = function(conf, identifier, value, limits, current_timestamp)
       local ok, err = increment_concurrent_quota(conf, identifier, value)
       if not ok then
         return nil, err
       end
 
-      ok, err = increment_total_quota(conf, limits, identifier, current_timestamp, value)
+      return true
+    end,
+    increment_total_count = function(conf, identifier, value, limits, current_timestamp)
+      local ok, err = increment_total_quota(conf, limits, identifier, current_timestamp, value)
       if not ok then
         return nil, err
       end

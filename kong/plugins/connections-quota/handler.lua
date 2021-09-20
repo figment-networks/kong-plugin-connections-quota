@@ -48,12 +48,20 @@ local function get_identifier(conf)
   return identifier or kong.client.get_forwarded_ip()
 end
 
-local function increment(premature, conf, identifier, value, ...)
+local function increment_total_count(premature, conf, identifier, value, ...)
   if premature then
     return
   end
 
-  policies[conf.policy].increment(conf, identifier, value, ...)
+  policies[conf.policy].increment_total_count(conf, identifier, value, ...)
+end
+
+local function increment_concurrent_count(premature, conf, identifier, value, ...)
+  if premature then
+    return
+  end
+
+  policies[conf.policy].increment_concurrent_count(conf, identifier, value, ...)
 end
 
 local function decrement(premature, conf, identifier, value)
@@ -232,21 +240,32 @@ function ConnectionsQuotaHandler:access(conf)
 
   if not websocket_connection then
     err = check_total_quota(conf, identifier, current_timestamp, limits)
+
+    if err then
+      return err
+    end
+
+    local ok
+    ok, err = timer_at(0, increment_total_count, conf, identifier, 1, limits, current_timestamp)
+
+    if not ok then
+      kong.log.err("failed to create timer: ", err)
+    end
   end
 
   if websocket_connection then
     err = check_concurrent_quota(conf, identifier)
-  end
 
-  if err then
-    return err
-  end
+    if err then
+      return err
+    end
 
-  local ok
-  ok, err = timer_at(0, increment, conf, identifier, 1, limits, current_timestamp)
+    local ok
+    ok, err = timer_at(0, increment_concurrent_count, conf, identifier, 1, limits, current_timestamp)
 
-  if not ok then
-    kong.log.err("failed to create timer: ", err)
+    if not ok then
+      kong.log.err("failed to create timer: ", err)
+    end
   end
 end
 

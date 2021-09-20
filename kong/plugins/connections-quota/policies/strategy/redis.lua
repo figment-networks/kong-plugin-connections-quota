@@ -154,7 +154,7 @@ local strategy = function (get_local_key, CONCURRENT_CONNECTIONS_QUOTA, TOTAL_CO
   end
 
   return {
-    increment = function(conf, identifier, value, limits, current_timestamp)
+    increment_concurrent_count = function(conf, identifier, value, limits, current_timestamp)
       local red, err = get_redis_connection(conf)
       if not red then
         kong.log.err("!!! failed to connect to Redis: ", err)
@@ -163,6 +163,20 @@ local strategy = function (get_local_key, CONCURRENT_CONNECTIONS_QUOTA, TOTAL_CO
 
       local ok, err = increment_concurrent_quota(red, conf, identifier, value)
       if not ok then
+        return nil, err
+      end
+
+      local ok, err = red:set_keepalive(10000, 100)
+      if not ok then
+        kong.log.err("failed to set Redis keepalive: ", err)
+      end
+
+      return true
+    end,
+    increment_total_count = function(conf, identifier, value, limits, current_timestamp)
+      local red, err = get_redis_connection(conf)
+      if not red then
+        kong.log.err("!!! failed to connect to Redis: ", err)
         return nil, err
       end
 

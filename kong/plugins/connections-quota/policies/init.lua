@@ -6,7 +6,7 @@ local fmt = string.format
 
 local EMPTY_UUID = "00000000-0000-0000-0000-000000000000"
 local CONCURRENT_CONNECTIONS_QUOTA = "concurrent-connections-quota"
-local TOTAL_CONNECTIONS_QUOTA = "consumerquota"
+local TOTAL_CONNECTIONS_QUOTA = "ratelimit"
 
 local function get_service_and_route_ids(conf)
   conf = conf or {}
