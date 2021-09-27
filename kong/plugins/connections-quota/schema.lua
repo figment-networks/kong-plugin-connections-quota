@@ -39,6 +39,16 @@ return {
           required = true,
           gt = 0
         }, },
+        { services_limits = {
+           type = "map",
+           keys = { type = "string" },
+           values = {
+              type = "map",
+              keys = { type = "string" },
+              values = { type = "number", gt = 0 },
+           },
+           required = false
+        }, },
         { limit_by = {
           type = "string",
           default = "consumer",
