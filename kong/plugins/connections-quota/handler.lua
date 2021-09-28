@@ -72,9 +72,38 @@ local function decrement(premature, conf, identifier, value)
   policies[conf.policy].decrement(conf, identifier, value)
 end
 
+local function fetch_limits(conf)
+  local host = kong.request.get_host()
+  local limits = conf
+
+  if conf.services_limits and conf.services_limits[host] then
+    limits = conf.services_limits[host]
+  end
+
+  return {
+    second = limits.second,
+    minute = limits.minute,
+    hour = limits.hour,
+    day = limits.day,
+    month = limits.month,
+    year = limits.year,
+  }
+end
+
+local function fetch_concurrent_limit(conf)
+  local host = kong.request.get_host()
+  local limit = conf.limit
+
+  if conf.services_limits and conf.services_limits[host] then
+    limit = conf.services_limits[host].limit
+  end
+
+  return limit
+end
+
 local function get_concurrent_usage(conf, identifier)
   local stop = false
-  local limit = conf.limit
+  local limit = fetch_concurrent_limit(conf)
 
   local current_usage, err = policies[conf.policy].concurrent_usage(conf, identifier)
   if err then
@@ -101,7 +130,7 @@ local function check_concurrent_quota(conf, identifier)
   kong.ctx.plugin.identifier = identifier
   local fault_tolerant = conf.fault_tolerant
 
-  local limit = conf.limit
+  local limit = fetch_concurrent_limit(conf)
 
   local usage, stop, err = get_concurrent_usage(conf, identifier)
   if err then
@@ -227,14 +256,7 @@ function ConnectionsQuotaHandler:access(conf)
   kong.ctx.plugin.headers = {}
   local current_timestamp = time() * 1000
   local identifier = get_identifier(conf)
-  local limits = {
-    second = conf.second,
-    minute = conf.minute,
-    hour = conf.hour,
-    day = conf.day,
-    month = conf.month,
-    year = conf.year,
-  }
+  local limits = fetch_limits(conf)
   local err
   local websocket_connection = kong_request.get_header('Upgrade') == 'websocket'
 
