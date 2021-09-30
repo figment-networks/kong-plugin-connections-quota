@@ -49,11 +49,16 @@ describe("HTTP [#" .. strategy .. "]", function()
       name = PLUGIN_NAME,
       consumer = { id = consumer.id },
       config = {
-        hour = 1,
+        hour = 10,
         limit = 1,
         policy = "redis",
         redis_host = redis_host,
-        redis_port = redis_port
+        redis_port = redis_port,
+        services_limits = {
+          ['test1.com'] = {
+            hour = 1
+          }
+        }
       }
     }
 
