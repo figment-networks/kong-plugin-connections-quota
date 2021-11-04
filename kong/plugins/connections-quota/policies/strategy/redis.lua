@@ -61,8 +61,8 @@ local strategy = function (get_local_key, CONCURRENT_CONNECTIONS_QUOTA, TOTAL_CO
     return red
   end
 
-  local function increment_concurrent_quota(red, conf, identifier, value)
-    local cache_key = get_local_key(CONCURRENT_CONNECTIONS_QUOTA, conf, identifier)
+  local function increment_concurrent_quota(red, conf, identifier, service_group, value)
+    local cache_key = get_local_key(CONCURRENT_CONNECTIONS_QUOTA, conf, identifier, service_group)
 
     red:init_pipeline()
     red:incrby(cache_key, value)
@@ -77,14 +77,14 @@ local strategy = function (get_local_key, CONCURRENT_CONNECTIONS_QUOTA, TOTAL_CO
     return true
   end
 
-  local function increment_total_quota(red, conf, limits, identifier, current_timestamp, value)
+  local function increment_total_quota(red, conf, limits, identifier, service_group, current_timestamp, value)
     local keys = {}
     local expirations = {}
     local idx = 0
     local periods = timestamp.get_timestamps(current_timestamp)
     for period, period_date in pairs(periods) do
       if limits[period] then
-        local cache_key = get_local_key(TOTAL_CONNECTIONS_QUOTA, conf, identifier, period, period_date)
+        local cache_key = get_local_key(TOTAL_CONNECTIONS_QUOTA, conf, identifier, service_group, period, period_date)
         local exists, err = red:exists(cache_key)
         if err then
           kong.log.err("failed to query Redis: ", err)
@@ -116,8 +116,8 @@ local strategy = function (get_local_key, CONCURRENT_CONNECTIONS_QUOTA, TOTAL_CO
     return true
   end
 
-  local function concurrent_usage(red, conf, identifier)
-    local cache_key = get_local_key(CONCURRENT_CONNECTIONS_QUOTA, conf, identifier)
+  local function concurrent_usage(red, conf, identifier, service_group)
+    local cache_key = get_local_key(CONCURRENT_CONNECTIONS_QUOTA, conf, identifier, service_group)
 
     local current_metric, err = red:get(cache_key)
     if err then
@@ -137,9 +137,9 @@ local strategy = function (get_local_key, CONCURRENT_CONNECTIONS_QUOTA, TOTAL_CO
     return current_metric or 0
   end
 
-  local function total_usage(red, conf, identifier, period, current_timestamp)
+  local function total_usage(red, conf, identifier, service_group, period, current_timestamp)
     local periods = timestamp.get_timestamps(current_timestamp)
-    local cache_key = get_local_key(TOTAL_CONNECTIONS_QUOTA, conf, identifier, period, periods[period])
+    local cache_key = get_local_key(TOTAL_CONNECTIONS_QUOTA, conf, identifier, service_group, period, periods[period])
 
     local current_metric, err = red:get(cache_key)
     if err then
@@ -154,14 +154,14 @@ local strategy = function (get_local_key, CONCURRENT_CONNECTIONS_QUOTA, TOTAL_CO
   end
 
   return {
-    increment_concurrent_count = function(conf, identifier, value, limits, current_timestamp)
+    increment_concurrent_count = function(conf, identifier, service_group, value, limits, current_timestamp)
       local red, err = get_redis_connection(conf)
       if not red then
         kong.log.err("!!! failed to connect to Redis: ", err)
         return nil, err
       end
 
-      local ok, err = increment_concurrent_quota(red, conf, identifier, value)
+      local ok, err = increment_concurrent_quota(red, conf, identifier, service_group, value)
       if not ok then
         return nil, err
       end
@@ -173,14 +173,14 @@ local strategy = function (get_local_key, CONCURRENT_CONNECTIONS_QUOTA, TOTAL_CO
 
       return true
     end,
-    increment_total_count = function(conf, identifier, value, limits, current_timestamp)
+    increment_total_count = function(conf, identifier, service_group, value, limits, current_timestamp)
       local red, err = get_redis_connection(conf)
       if not red then
         kong.log.err("!!! failed to connect to Redis: ", err)
         return nil, err
       end
 
-      local ok, err = increment_total_quota(red, conf, limits, identifier, current_timestamp, value)
+      local ok, err = increment_total_quota(red, conf, limits, identifier, service_group, current_timestamp, value)
       if not ok then
         return nil, err
       end
@@ -192,14 +192,14 @@ local strategy = function (get_local_key, CONCURRENT_CONNECTIONS_QUOTA, TOTAL_CO
 
       return true
     end,
-    decrement = function(conf, identifier, value)
+    decrement = function(conf, identifier, service_group, value)
       local red, err = get_redis_connection(conf)
       if not red then
         kong.log.err("failed to connect to Redis: ", err)
         return nil, err
       end
 
-      local cache_key = get_local_key(CONCURRENT_CONNECTIONS_QUOTA, conf, identifier)
+      local cache_key = get_local_key(CONCURRENT_CONNECTIONS_QUOTA, conf, identifier, service_group)
 
       red:init_pipeline()
       red:decrby(cache_key, value)
@@ -219,14 +219,14 @@ local strategy = function (get_local_key, CONCURRENT_CONNECTIONS_QUOTA, TOTAL_CO
 
       return true
     end,
-    concurrent_usage = function(conf, identifier)
+    concurrent_usage = function(conf, identifier, service_group)
       local red, err = get_redis_connection(conf)
       if not red then
         kong.log.err("failed to connect to Redis: ", err)
         return nil, err
       end
 
-      local concurrent_usage_metric = concurrent_usage(red, conf, identifier)
+      local concurrent_usage_metric = concurrent_usage(red, conf, identifier, service_group)
 
       local ok, err = red:set_keepalive(10000, 100)
       if not ok then
@@ -236,14 +236,14 @@ local strategy = function (get_local_key, CONCURRENT_CONNECTIONS_QUOTA, TOTAL_CO
 
       return concurrent_usage_metric
     end,
-    total_usage = function(conf, identifier, period, current_timestamp)
+    total_usage = function(conf, identifier, service_group, period, current_timestamp)
       local red, err = get_redis_connection(conf)
       if not red then
         kong.log.err("failed to connect to Redis: ", err)
         return nil, err
       end
 
-      local total_usage_metric = total_usage(red, conf, identifier, period, current_timestamp)
+      local total_usage_metric = total_usage(red, conf, identifier, service_group, period, current_timestamp)
 
       local ok, err = red:set_keepalive(10000, 100)
       if not ok then

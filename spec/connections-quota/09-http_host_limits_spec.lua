@@ -18,12 +18,28 @@ describe("HTTP [#" .. strategy .. "]", function()
       "keyauth_credentials",
     }, { PLUGIN_NAME })
 
+    local upstream = bp.upstreams:insert({
+      name = "mock-upstream",
+    })
+
+    bp.targets:insert {
+      target = helpers.mock_upstream_host .. ':' .. helpers.mock_upstream_port,
+      weight = 1000,
+      upstream = { id = upstream.id },
+    }
+
     local service = bp.services:insert {
-      name = "http"
+      name = "http",
+      host = upstream.name,
+      port = helpers.mock_upstream_port,
+      protocol = helpers.mock_upstream_protocol,
     }
 
     bp.routes:insert {
-      hosts = { "test1.com" },
+      protocols = { "http" },
+      name = "http-route",
+      paths = { "/" },
+      methods = { "GET" },
       service     = service,
     }
 
@@ -56,6 +72,7 @@ describe("HTTP [#" .. strategy .. "]", function()
         redis_port = redis_port,
         services_limits = {
           ['test1.com'] = {
+            service_group = 1,
             hour = 1
           }
         }

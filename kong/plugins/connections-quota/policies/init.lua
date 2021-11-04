@@ -25,7 +25,7 @@ local function get_service_and_route_ids(conf)
   return service_id, route_id
 end
 
-local get_local_key = function(key_type, conf, identifier, period, period_date)
+local get_local_key = function(key_type, conf, identifier, service_group, period, period_date)
   local service_id, route_id = get_service_and_route_ids(conf)
 
   if not period or period == null then
@@ -36,7 +36,11 @@ local get_local_key = function(key_type, conf, identifier, period, period_date)
     period_date = EMPTY_UUID
   end
 
-  return fmt("%s:%s:%s:%s:%s:%s", key_type, route_id, service_id, identifier, period_date, period)
+  if not service_group or service_group == null then
+    service_group = EMPTY_UUID
+  end
+
+  return fmt("%s:%s:%s:%s:%s:%s:%s", key_type, route_id, service_id, service_group, identifier, period_date, period)
 end
 
 return {
