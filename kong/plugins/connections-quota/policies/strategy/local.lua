@@ -4,8 +4,8 @@ local shm = ngx.shared.kong_rate_limiting_counters
 local EXPIRATIONS = require "kong.plugins.connections-quota.expiration"
 
 local strategy = function (get_local_key, CONCURRENT_CONNECTIONS_QUOTA, TOTAL_CONNECTIONS_QUOTA)
-  local function increment_concurrent_quota(conf, identifier, value)
-    local cache_key = get_local_key(CONCURRENT_CONNECTIONS_QUOTA, conf, identifier)
+  local function increment_concurrent_quota(conf, identifier, service_group, value)
+    local cache_key = get_local_key(CONCURRENT_CONNECTIONS_QUOTA, conf, identifier, service_group)
     local newval, err = shm:incr(cache_key, value, 0)
     if not newval then
       kong.log.err("could not increment counter: ", err)
@@ -15,11 +15,11 @@ local strategy = function (get_local_key, CONCURRENT_CONNECTIONS_QUOTA, TOTAL_CO
     return true
   end
 
-  local function increment_total_quota(conf, limits, identifier, current_timestamp, value)
+  local function increment_total_quota(conf, limits, identifier, service_group, current_timestamp, value)
     local periods = timestamp.get_timestamps(current_timestamp)
     for period, period_date in pairs(periods) do
       if limits[period] then
-        local cache_key = get_local_key(TOTAL_CONNECTIONS_QUOTA, conf, identifier, period, period_date)
+        local cache_key = get_local_key(TOTAL_CONNECTIONS_QUOTA, conf, identifier, service_group, period, period_date)
         local newval, err = shm:incr(cache_key, value, 0, EXPIRATIONS[period])
         if not newval then
           kong.log.err("could not increment counter for period '", period, "': ", err)
@@ -31,8 +31,8 @@ local strategy = function (get_local_key, CONCURRENT_CONNECTIONS_QUOTA, TOTAL_CO
     return true
   end
 
-  local function concurrent_usage(conf, identifier)
-    local cache_key = get_local_key(CONCURRENT_CONNECTIONS_QUOTA, conf, identifier)
+  local function concurrent_usage(conf, identifier, service_group)
+    local cache_key = get_local_key(CONCURRENT_CONNECTIONS_QUOTA, conf, identifier, service_group)
 
     local current_metric, err = shm:get(cache_key)
     if err then
@@ -47,9 +47,9 @@ local strategy = function (get_local_key, CONCURRENT_CONNECTIONS_QUOTA, TOTAL_CO
     return current_metric or 0
   end
 
-  local function total_usage(conf, identifier, period, current_timestamp)
+  local function total_usage(conf, identifier, service_group, period, current_timestamp)
     local periods = timestamp.get_timestamps(current_timestamp)
-    local cache_key = get_local_key(TOTAL_CONNECTIONS_QUOTA, conf, identifier, period, periods[period])
+    local cache_key = get_local_key(TOTAL_CONNECTIONS_QUOTA, conf, identifier, service_group, period, periods[period])
 
     local current_metric, err = shm:get(cache_key)
     if err then
@@ -60,24 +60,24 @@ local strategy = function (get_local_key, CONCURRENT_CONNECTIONS_QUOTA, TOTAL_CO
   end
 
   return {
-    increment_concurrent_count = function(conf, identifier, value, limits, current_timestamp)
-      local ok, err = increment_concurrent_quota(conf, identifier, value)
+    increment_concurrent_count = function(conf, identifier, service_group, value, limits, current_timestamp)
+      local ok, err = increment_concurrent_quota(conf, identifier, service_group, value)
       if not ok then
         return nil, err
       end
 
       return true
     end,
-    increment_total_count = function(conf, identifier, value, limits, current_timestamp)
-      local ok, err = increment_total_quota(conf, limits, identifier, current_timestamp, value)
+    increment_total_count = function(conf, identifier, service_group, value, limits, current_timestamp)
+      local ok, err = increment_total_quota(conf, limits, identifier, service_group, current_timestamp, value)
       if not ok then
         return nil, err
       end
 
       return true
     end,
-    decrement = function(conf, identifier, value)
-      local cache_key = get_local_key(CONCURRENT_CONNECTIONS_QUOTA, conf, identifier)
+    decrement = function(conf, identifier, service_group, value)
+      local cache_key = get_local_key(CONCURRENT_CONNECTIONS_QUOTA, conf, identifier, service_group)
       local newval, err = shm:incr(cache_key, -1*value, 0) -- no shm:decr sadly
       if not newval then
         kong.log.err("could not increment counter: ", err)
@@ -86,13 +86,13 @@ local strategy = function (get_local_key, CONCURRENT_CONNECTIONS_QUOTA, TOTAL_CO
 
       return true
     end,
-    concurrent_usage = function(conf, identifier)
-      local concurrent_usage_metric = concurrent_usage(conf, identifier)
+    concurrent_usage = function(conf, identifier, service_group)
+      local concurrent_usage_metric = concurrent_usage(conf, identifier, service_group)
 
       return concurrent_usage_metric
     end,
-    total_usage = function(conf, identifier, period, current_timestamp)
-      local total_usage_metric = total_usage(conf, identifier, period, current_timestamp)
+    total_usage = function(conf, identifier, service_group, period, current_timestamp)
+      local total_usage_metric = total_usage(conf, identifier, service_group, period, current_timestamp)
 
       return total_usage_metric
     end

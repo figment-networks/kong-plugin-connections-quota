@@ -48,28 +48,39 @@ local function get_identifier(conf)
   return identifier or kong.client.get_forwarded_ip()
 end
 
-local function increment_total_count(premature, conf, identifier, value, ...)
-  if premature then
-    return
+local function get_service_group(conf)
+  local host = kong.request.get_host()
+  local service_group = ''
+
+  if conf.services_limits and conf.services_limits[host] then
+    service_group = conf.services_limits[host].service_group
   end
 
-  policies[conf.policy].increment_total_count(conf, identifier, value, ...)
+  return service_group
 end
 
-local function increment_concurrent_count(premature, conf, identifier, value, ...)
+local function increment_total_count(premature, conf, identifier, service_group, value, ...)
   if premature then
     return
   end
 
-  policies[conf.policy].increment_concurrent_count(conf, identifier, value, ...)
+  policies[conf.policy].increment_total_count(conf, identifier, service_group, value, ...)
 end
 
-local function decrement(premature, conf, identifier, value)
+local function increment_concurrent_count(premature, conf, identifier, service_group, value, ...)
   if premature then
     return
   end
 
-  policies[conf.policy].decrement(conf, identifier, value)
+  policies[conf.policy].increment_concurrent_count(conf, identifier, service_group, value, ...)
+end
+
+local function decrement(premature, conf, identifier, service_group, value)
+  if premature then
+    return
+  end
+
+  policies[conf.policy].decrement(conf, identifier, service_group, value)
 end
 
 local function fetch_limits(conf)
@@ -101,11 +112,11 @@ local function fetch_concurrent_limit(conf)
   return limit
 end
 
-local function get_concurrent_usage(conf, identifier)
+local function get_concurrent_usage(conf, identifier, service_group)
   local stop = false
   local limit = fetch_concurrent_limit(conf)
 
-  local current_usage, err = policies[conf.policy].concurrent_usage(conf, identifier)
+  local current_usage, err = policies[conf.policy].concurrent_usage(conf, identifier, service_group)
   if err then
     return nil, nil, err
   end
@@ -125,14 +136,15 @@ local function get_concurrent_usage(conf, identifier)
   return usage, stop
 end
 
-local function check_concurrent_quota(conf, identifier)
+local function check_concurrent_quota(conf, identifier, service_group)
   kong.ctx.plugin.decrement_on_log = true
   kong.ctx.plugin.identifier = identifier
+  kong.ctx.plugin.service_group = service_group
   local fault_tolerant = conf.fault_tolerant
 
   local limit = fetch_concurrent_limit(conf)
 
-  local usage, stop, err = get_concurrent_usage(conf, identifier)
+  local usage, stop, err = get_concurrent_usage(conf, identifier, service_group)
   if err then
     if not fault_tolerant then
       return error(err)
@@ -162,12 +174,12 @@ local function check_concurrent_quota(conf, identifier)
   end
 end
 
-local function get_total_usage(conf, identifier, current_timestamp, limits)
+local function get_total_usage(conf, identifier, service_group, current_timestamp, limits)
   local usage = {}
   local stop
 
   for period, limit in pairs(limits) do
-    local current_usage, err = policies[conf.policy].total_usage(conf, identifier, period, current_timestamp)
+    local current_usage, err = policies[conf.policy].total_usage(conf, identifier, service_group, period, current_timestamp)
     if err then
       return nil, nil, err
     end
@@ -189,11 +201,11 @@ local function get_total_usage(conf, identifier, current_timestamp, limits)
   return usage, stop
 end
 
-local function check_total_quota(conf, identifier, current_timestamp, limits)
+local function check_total_quota(conf, identifier, service_group, current_timestamp, limits)
   -- Consumer is identified by ip address or authenticated_credential id
   local fault_tolerant = conf.fault_tolerant
 
-  local usage, stop, err = get_total_usage(conf, identifier, current_timestamp, limits)
+  local usage, stop, err = get_total_usage(conf, identifier, service_group, current_timestamp, limits)
   if err then
     if not fault_tolerant then
       return error(err)
@@ -255,20 +267,21 @@ end
 function ConnectionsQuotaHandler:access(conf)
   kong.ctx.plugin.headers = {}
   local current_timestamp = time() * 1000
+  local service_group = get_service_group(conf)
   local identifier = get_identifier(conf)
   local limits = fetch_limits(conf)
   local err
   local websocket_connection = kong_request.get_header('Upgrade') == 'websocket'
 
   if not websocket_connection then
-    err = check_total_quota(conf, identifier, current_timestamp, limits)
+    err = check_total_quota(conf, identifier, service_group, current_timestamp, limits)
 
     if err then
       return err
     end
 
     local ok
-    ok, err = timer_at(0, increment_total_count, conf, identifier, 1, limits, current_timestamp)
+    ok, err = timer_at(0, increment_total_count, conf, identifier, service_group, 1, limits, current_timestamp)
 
     if not ok then
       kong.log.err("failed to create timer: ", err)
@@ -276,14 +289,14 @@ function ConnectionsQuotaHandler:access(conf)
   end
 
   if websocket_connection then
-    err = check_concurrent_quota(conf, identifier)
+    err = check_concurrent_quota(conf, identifier, service_group)
 
     if err then
       return err
     end
 
     local ok
-    ok, err = timer_at(0, increment_concurrent_count, conf, identifier, 1, limits, current_timestamp)
+    ok, err = timer_at(0, increment_concurrent_count, conf, identifier, service_group, 1, limits, current_timestamp)
 
     if not ok then
       kong.log.err("failed to create timer: ", err)
@@ -301,7 +314,8 @@ end
 function ConnectionsQuotaHandler:log(conf)
   if kong.ctx.plugin.decrement_on_log then
     local identifier = kong.ctx.plugin.identifier
-    local ok, err = timer_at(0, decrement, conf, identifier, 1)
+    local service_group = kong.ctx.plugin.service_group
+    local ok, err = timer_at(0, decrement, conf, identifier, service_group, 1)
     if not ok then
       kong.log.err("failed to create decrement timer: ", err)
     end
