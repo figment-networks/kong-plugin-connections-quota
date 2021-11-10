@@ -36,7 +36,7 @@ local get_local_key = function(key_type, conf, identifier, service_group, period
     period_date = EMPTY_UUID
   end
 
-  if not service_group or service_group == null then
+  if not service_group or service_group == '' or service_group == null then
     service_group = EMPTY_UUID
   end
 
