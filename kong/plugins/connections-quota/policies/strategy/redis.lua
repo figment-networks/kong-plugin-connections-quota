@@ -17,6 +17,10 @@ local strategy = function (get_local_key, CONCURRENT_CONNECTIONS_QUOTA, TOTAL_CO
   local function get_redis_connection(conf)
     local red = redis:new()
     red:set_timeout(conf.redis_timeout)
+
+    sock_opts.ssl = conf.redis_ssl
+    sock_opts.ssl_verify = conf.redis_ssl_verify
+
     -- use a special pool name only if redis_database is set to non-zero
     -- otherwise use the default pool name host:port
     sock_opts.pool = conf.redis_database and
@@ -37,7 +41,13 @@ local strategy = function (get_local_key, CONCURRENT_CONNECTIONS_QUOTA, TOTAL_CO
 
     if times == 0 then
       if is_present(conf.redis_password) then
-        local ok, err = red:auth(conf.redis_password)
+        local ok, err
+        if is_present(conf.redis_username) then
+          ok, err = red:auth(conf.redis_username, conf.redis_password)
+        else
+          ok, err = red:auth(conf.redis_password)
+        end
+
         if not ok then
           kong.log.err("failed to auth Redis: ", err)
           return nil, err
