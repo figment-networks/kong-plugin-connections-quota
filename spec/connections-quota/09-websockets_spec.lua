@@ -213,7 +213,7 @@ describe("Websockets [#" .. strategy .. "]", function()
 
       assert(wc2:send_ping(cjson.encode(payload)))
       frame, typ, err = wc2:recv_frame()
-      assert.is_nil(wc1.fatal)
+      assert.is_nil(wc2.fatal)
       assert(frame, err)
       assert.equal("pong", typ)
 
