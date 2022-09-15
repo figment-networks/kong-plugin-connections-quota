@@ -7,7 +7,6 @@ local EXPIRATIONS = require "kong.plugins.connections-quota.expiration"
 
 local strategy = function (get_local_key, CONCURRENT_CONNECTIONS_QUOTA, TOTAL_CONNECTIONS_QUOTA)
 
-  local EXPIRATION = 10*60
   local sock_opts = {}
 
   local function is_present(str)
@@ -76,7 +75,7 @@ local strategy = function (get_local_key, CONCURRENT_CONNECTIONS_QUOTA, TOTAL_CO
 
     red:init_pipeline()
     red:incrby(cache_key, value)
-    red:expire(cache_key, EXPIRATION)
+    red:expire(cache_key, EXPIRATIONS["month"])
 
     local _, err = red:commit_pipeline()
     if err then
@@ -213,7 +212,7 @@ local strategy = function (get_local_key, CONCURRENT_CONNECTIONS_QUOTA, TOTAL_CO
 
       red:init_pipeline()
       red:decrby(cache_key, value)
-      red:expire(cache_key, EXPIRATION)
+      red:expire(cache_key, EXPIRATIONS["month"])
 
       local _, err = red:commit_pipeline()
       if err then

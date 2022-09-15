@@ -2,6 +2,16 @@
 
 Kong plugin to make sure user can have a limited number of total and concurrent connections.
 
+## Concurrent vs. Per-unit rate limits
+
+"Concurrent" connections is a misnomer in this plugin, because it's actually only affecting the number of websocket connections. This was implemented purposefully to handle APIs that support both websockets and standard HTTP connections. We needed a way to differentiate between the two and restrict them independently.
+
+**TODO**: Implement a separate websocket configuration for limiting active websocket connections and use "concurrent" as a limit of the total number of connections.
+
+## Cache Expiration
+
+When incrementing or decrementing the number of concurrent connections in the Redis cache, we use an expiration of 1 month for the value. This is because it's possible for websocket connections to run for several days, or even weeks, before they are refreshed with a new connection. We don't want the value to be lost in the meantime.
+
 ## Testing
 
 To run lint and tests install

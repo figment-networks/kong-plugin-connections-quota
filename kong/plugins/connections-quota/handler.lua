@@ -317,7 +317,7 @@ function ConnectionsQuotaHandler:log(conf)
     local service_group = kong.ctx.plugin.service_group
     local ok, err = timer_at(0, decrement, conf, identifier, service_group, 1)
     if not ok then
-      kong.log.err("failed to create decrement timer: ", err)
+      kong.log.err("failed to decrement counter after ws closed: ", err)
     end
   end
 end
